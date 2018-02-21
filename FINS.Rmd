@@ -1,0 +1,385 @@
+---
+title: "Final Exam"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(GGally)
+library(lmPerm)
+library(faraway)
+library(car)
+library(ggplot2)
+library(gridExtra)
+library(e1071)
+library(zoo)
+library(caret) 
+library(MASS) 
+library(ROCR) 
+library(pscl)
+```
+
+## Excercise 1.
+
+```{r}
+stockdata <- read_csv("C:/Users/PrabhatJohl/Desktop/Final/stockdata.csv")
+summary(stockdata)
+
+data.frame(Variables = c("days", "cap.to.gdp", "q.ratio", "gaap", "trailing.pe","avg.allocation","price","vol"),MissingCount = as.vector(colSums(is.na(stockdata))))
+
+ggpairs(stockdata,columns = c(2:8), lower=list(combo=wrap("facethist", binwidth=0.8)))
+```
+
+(a) Fit a model to explain price in terms of the predictors. Which variables are important, can any of the variables be removed ? do use F-test justify ?
+```{r}
+A <- lm(price~.-days,data = stockdata)
+summary(A)
+
+B <- lm(price~.-days-vol,data = stockdata)
+summary(B)
+
+anova(A,B)
+var.test(stockdata$price, stockdata$vol, alternative = "two.sided")
+```
+
+(b) Construct con???dence intervals using permutation tests?
+```{r}
+C<-aovp(price~.-vol-days,data=stockdata)
+summary(C)
+
+#qqnorm(resid(C),main="Normal QQ Plot")
+#qqline(resid(C),col='red')
+
+confint(C)
+```
+
+(c) Check the constant variance assumption for the errors?
+```{r}
+mod <- fortify(B)
+
+p1 <- qplot(.fitted, .resid, data = mod) + geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Residuals vs Fitted", x = "Fitted", y = "Residuals") + geom_smooth(color = "red", se = F)
+
+p2 <- qplot(.fitted, abs(.resid), data = mod) + geom_hline(yintercept = 0, linetype = "dashed") +labs(title = "Scale-Location", x = "Fitted", y = "|Residuals|") + geom_smooth(method = "lm", color = "red", se = F)
+
+grid.arrange(p1, p2, nrow = 2)
+
+ncvTest(B)
+
+##Approximate test of non-constant error variance.
+summary(lm(abs(residuals(B)) ~ fitted(B)))
+```
+
+(d) Check the independentness of the errors assumption?
+```{r}
+res = residuals(B)
+nres = length(res)
+summary(lm (tail(res,nres-1) ~ head(res, nres-1))) 
+
+durbinWatsonTest(B)
+```
+
+(e) Check the normality assumption ?
+```{r}
+p3 <- qplot(sample = scale(.resid), data = mod) + geom_abline(intercept = 0,
+slope = 1, color = "red") + labs(title = "Normal Q-Q plot", y = "Residuals")
+p3
+
+shapiro.test(residuals(B))
+```
+
+(f) Is nonlinearity a problem?
+```{r}
+par(mfrow=c(2,2))
+plot(density(stockdata$cap.to.gdp),main = "cap.to.gdp",xlab = paste("skewness =",skewness(stockdata$cap.to.gdp)))
+plot(density(stockdata$q.ratio),main = "q.ratio",xlab = paste("skewness =",skewness(stockdata$q.ratio)))
+plot(density(stockdata$gaap),main = "gaap",xlab = paste("skewness =",skewness(stockdata$gaap)))
+plot(density(stockdata$trailing.pe),main = "trailing.pe",xlab = paste("skewness =",skewness(stockdata$trailing.pe)))
+
+
+crPlots(B)
+## the strucutre of relationship is highly linear.
+```
+
+(g) Check for outliers, compute and plot Cook's distance?
+```{r}
+outlierTest(B)
+
+plot(B, which=4,cook.levels=0.06)
+```
+
+(h) Check for in???uential points?
+```{r}
+influencePlot(B,main="Influence Plot")
+halfnorm(lm.influence(B)$hat, ylab = "Leverages")
+```
+
+(i) The return at time t is de???ned as r(t) = p(t + 1)/p(t)???1 where p is the price data for day t. Are the returns normally distributed? Please justify your answer using Q-Q plots and normality tests.
+```{r}
+E<- (stockdata$price*(stockdata$days+1))/(stockdata$price*(stockdata$days-1))
+Return <- data.frame(E)
+```
+
+## Excercise 2
+
+```{r}
+data("cheddar")
+summary(cheddar)
+
+data.frame(Variables = c("taste", "Acetic", "H2S", "Lactic"),MissingCount = as.vector(colSums(is.na(cheddar))))
+
+ggpairs(cheddar,columns = c(1:4), lower=list(combo=wrap("facethist", binwidth=0.8)))
+```
+
+(a) Fit a model to explain taste in terms of the predictors. Which variables are important, can any of the variables be removed ?
+```{r}
+F <- lm(taste~.,data = cheddar)
+summary(F)
+
+F1 <- lm(taste~.-Acetic,data = cheddar)
+summary(F1)
+
+anova(F,F1)
+var.test(cheddar$taste, cheddar$Acetic, alternative = "two.sided")
+```
+
+(b) Check the constant variance assumption for the errors?
+```{r}
+plot(F1,which=1)
+plot(F1,which = 3)
+
+ncvTest(F1)
+
+##Approximate test of non-constant error variance.
+summary(lm(abs(residuals(F1)) ~ fitted(F1)))
+```
+
+(C) Check the independentness of the errors assumption?
+```{r}
+res = residuals(F1)
+nres = length(res)
+summary(lm (tail(res,nres-1) ~ head(res, nres-1))) 
+
+durbinWatsonTest(F1)
+```
+
+(d) Check the normality assumption ?
+```{r}
+plot(F1,which = 2)
+
+shapiro.test(F1)
+```
+
+(e) Is nonlinearity a problem?
+```{r}
+crPlots(F1)
+
+par(mfrow=c(1,1))
+plot(density(cheddar$H2S),main = "H2S",xlab = paste("skewness =",skewness(cheddar$H2S)))
+plot(density(cheddar$Lactic),main = "Lactic",xlab = paste("skewness =",skewness(cheddar$Lactic)))
+```
+
+(g) Check for outliers, compute and plot Cook's distance, Influencial points?
+```{r}
+outlierTest(F1)
+plot(F1, which=4,cook.levels=0.06)
+
+influencePlot(F1,main="Influence Plot")
+halfnorm(lm.influence(F1)$hat, ylab = "Leverages")
+```
+
+## Excercise 3
+
+(a) Data preparation: combine all data into an R dataframe object, and construct dummy or factor variable for 4 quarters. First model is HOUST ??? GDP + CPI + quarter?
+```{r}
+CPI <- read_excel("C:/Users/PrabhatJohl/Desktop/Final/House/CPI.xls")
+GDP <- read_excel("C:/Users/PrabhatJohl/Desktop/Final/House/GDP.xls")
+HOUST <- read_excel("C:/Users/PrabhatJohl/Desktop/Final/House/HOUST.xls")
+POP <- read_excel("C:/Users/PrabhatJohl/Desktop/Final/House/POP.xls")
+
+head(GDP)
+head(CPI)
+head(HOUST)
+head(POP)
+
+df= merge(x = CPI,y= GDP, by.x = "DATE" , by.y = "DATE" ,all="TRUE")
+df= merge(x = df , y= HOUST , by.x = "DATE" , by.y= "DATE", all = "TRUE")
+df = merge(x=df, y =POP , by.x="DATE" , by.y= "DATE", all="TRUE")
+
+df = na.omit(df)
+summary(df)
+View(head(df))
+
+df$QUARTER = as.yearqtr(df$DATE, format = "%Y-%m-%d")
+df$QUARTER = as.numeric(format(df$QUARTER, format="%q"))
+df$QUARTER = as.factor(df$QUARTER)
+df$DATE = NULL
+View(head(df))
+
+G <- lm(HOUST ~ GDP+CPI+QUARTER , data = df)
+summary(G)
+```
+
+(b) Use one-way ANOVA to determine whether there's a seasonal e???ect. Show necessary steps and explanation?
+```{r}
+plot(HOUST ~ QUARTER, df)
+
+G2 <- lm(HOUST~QUARTER,data = df)
+summary(G2)
+anova(G2)
+
+round(coef(G),1)
+anova(G)
+##We see that there is indeed a difference in the quarters and thus we state that there is seasonal effect
+```
+
+(c) Do pair-wise comparison for di???erent levels. In particular, construct %90 con???dence intervals for the pairwise di???erences?
+```{r}
+#The function TukeyHD() takes the fitted ANOVA as an argument.
+
+tci = TukeyHSD(aov(G),conf.level = 0.90)
+tci
+
+plot(tci)
+#Difference better 2-1,3-1 and 4-2 are significant in the 90 percent interval as p value is less than 0.5.
+```
+
+(d) Add population to the ???rst model, do the steps (b) and (c) again?
+```{r}
+G3 <- lm(HOUST ~ GDP+CPI+QUARTER+POPULATION , data = df)
+summary(G3)
+
+compareCoefs(G3,G2,se=FALSE)
+
+anova(G3)
+
+tci1 = TukeyHSD(aov(G3),conf.level = 0.90)
+plot(tci1)
+## #since the p-value of pop is very large we can say that there is no difference in the seasonal effect by adding population
+
+```
+
+##  Exercise 4
+
+```{r}
+test <- read_csv("C:/Users/PrabhatJohl/Desktop/Final/test-default.csv")
+test$default <- factor(test$default)
+test$student <- factor(test$student)
+View(head(test))
+
+train <- read_csv("C:/Users/PrabhatJohl/Desktop/Final/train-default.csv")
+train$default <- factor(train$default)
+train$student <- factor(train$student)
+View(head(train))
+```
+
+
+(a) Fit a logistic regression model with the default as the response and the variable balance as the predictor. Make sure that predictor variable in your model is signi???cant?
+```{r}
+A1 <- glm(default~balance,data = train, family =binomial (link='logit'), maxit = 100) 
+summary(A1) 
+```
+
+(b) Why is your model a good/reasonable model? Check the AIC and pseudo-R2 values?
+```{r}
+## Model A1 behavior - it follows a sigmoidal curve along the xy plane.
+p <- qplot(train$balance,fitted.values(A1)) + labs(title = "Predicted Probabilites", x = "default", y = "balance") + geom_smooth(color = "red", se = T) 
+
+round(pR2(A1),2) 
+varImp(A1)
+anova(A1,test = "Chisq")
+```
+
+(c) Give an interpretation of the regression coe???cients?
+```{r}
+round(coef(A1),3)
+
+```
+
+(d) Form the confusion matrix over the test data. What percentage of the time, are your predictions correct?
+```{r}
+## Assessing the predictive ability of the model A1 
+## Train dataset
+
+pred <- predict(A1, newdata =train,type = "response") 
+pred <- ifelse(pred > 0.5,1,0) 
+table(pred,train$default) 
+
+pr <- prediction(pred,train$default) 
+prf <- performance(pr, measure = "tpr",x.measure = "fpr") 
+plot(prf) 
+
+auc <- performance(pr, measure = "auc") 
+auc <- auc@y.values[[1]] 
+print(auc)
+
+## Test dataset
+
+pred1 <- predict(A1, newdata =test,type = "response") 
+pred1 <- ifelse(pred > 0.5,1,0) 
+table(pred1,test$default) 
+
+pr <- prediction(pred1,test$default) 
+prf <- performance(pr, measure = "tpr",x.measure = "fpr") 
+plot(prf) 
+
+auc <- performance(pr, measure = "auc") 
+auc <- auc@y.values[[1]] 
+print(auc)
+```
+
+(e) Now, let's add the variables income and student to the model. Fit a logistic regression model of the form "default balance + income + student", in other words, regress the variable default to all the other predictors with logistic regression?
+```{r}
+B1 <- glm(default~.-customer,data = train, family =binomial (link='logit'), maxit = 100) 
+summary(B1) 
+
+round(pR2(B1),2) 
+varImp(B1)
+anova(B1,test = "Chisq")
+
+## Assessing the predictive ability of the model A1 
+## Train dataset
+
+pred <- predict(B1, newdata =train,type = "response") 
+pred <- ifelse(pred > 0.5,1,0) 
+table(pred,train$default) 
+
+pr <- prediction(pred,train$default) 
+prf <- performance(pr, measure = "tpr",x.measure = "fpr") 
+plot(prf) 
+
+auc <- performance(pr, measure = "auc") 
+auc <- auc@y.values[[1]] 
+print(auc)
+
+## Test dataset
+
+pred1 <- predict(B1, newdata =test,type = "response") 
+pred1 <- ifelse(pred > 0.5,1,0) 
+table(pred1,test$default) 
+
+pr <- prediction(pred1,test$default) 
+prf <- performance(pr, measure = "tpr",x.measure = "fpr") 
+plot(prf) 
+
+auc <- performance(pr, measure = "auc") 
+auc <- auc@y.values[[1]] 
+print(auc)
+```
+
+(f) In your model in question (e), what is the estimated probabilty of default for a student with a credit card balance of $2,000 and an income of $40,000? What is the probabilty of the default for a non-student with the same credit card balance and income? 
+```{r}
+new = data.frame(customer = c(1,2),balance = c(2000,2000),income = c(40000,40000),student = c("No","Yes"))
+new$student <- factor(new$student)
+a<-predict(B1,new,type = "response") 
+table(new$student,a)
+
+```
+
+(g) Are the variables student and balance are correlated? If yes, why do you think this is the case? If no, please explain?
+```{r}
+boxplot(train$student,train$balance)
+boxplot(test$student,test$balance)
+```
+
+(h) Does the data say that it is more likely for a student to default compared to a non-student for di???erent values of income level? Please comment. In other words, if you were the credit card company, would you prefer students as customers or non-students as customers with the same income level?
